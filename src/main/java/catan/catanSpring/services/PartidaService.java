@@ -5,6 +5,13 @@ import catan.catanSpring.repositories.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.net.URI;
+import org.springframework.http.ResponseEntity;
+import catan.catanSpring.dto.NovaPartidaPeticio;
+import catan.catanSpring.dto.PartidaResposta;
+import org.springframework.http.HttpStatus;
+import catan.catanSpring.dto.ConstruccioAdjacenciaResposta;
+import catan.catanSpring.dto.TaulerHexagonResposta;
 
 import java.util.*;
 
@@ -33,16 +40,19 @@ public class PartidaService {
     @Autowired
     private TaulerLoaderService taulerLoaderService;
 
-    public int iniciarPartida(List<String> nomsJugadors) {
-        if (nomsJugadors == null || nomsJugadors.size() < 2 || nomsJugadors.size() > 4) {
-            throw new IllegalArgumentException("Hi ha d'haver entre 2 i 4 jugadors.");
+    public ResponseEntity<?> iniciarPartida(NovaPartidaPeticio peticio) {
+        if (peticio.nomsJugadors() == null || peticio.nomsJugadors().size() < 2 || peticio.nomsJugadors().size() > 4) {
+            return ResponseEntity.badRequest().body("Hi ha d'haver entre 2 i 4 jugadors.");
         }
 
         Partida partida = new Partida();
         partida.IniciarPartida();
+        if (peticio.puntsPerGuanyar() != null) {
+            partida.setPuntsPerGuanyar(peticio.puntsPerGuanyar());
+        }
         partidaRepository.save(partida);
 
-        List<String> nomsBarrejats = new ArrayList<>(nomsJugadors);
+        List<String> nomsBarrejats = new ArrayList<>(peticio.nomsJugadors());
         Collections.shuffle(nomsBarrejats);
 
         ColorJugador[] colors = ColorJugador.values();
@@ -61,14 +71,65 @@ public class PartidaService {
                 .orElse(partida.getJugadors().get(0));
         partida.setJugadorActiu(primerJugador);
 
-        // Cargar datos del tauler (topologia CSV) - necesita implementarse con lógica propia
         carregarDades(partida);
-
-        // Crear pila de cartas
+        
         crearPilaCartes(partida);
 
         partidaRepository.save(partida);
-        return partida.getId();
+
+        return ResponseEntity.created(URI.create("/partida/" + partida.getId()))
+                .body(PartidaResposta.de(partida));
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> obtenirTauler(int idPartida) {
+        Optional<Partida> partidaOpt = partidaRepository.findById(idPartida);
+        if (partidaOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No s'ha trobat cap partida amb ID: " + idPartida);
+        }
+
+        Partida partida = partidaOpt.get();
+        List<Hexagon> hexagons = hexagonRepository.findByPartidaIdWithVertexs(idPartida);
+        Hexagon hexLladre = partida.getHexagonLladre();
+
+        List<TaulerHexagonResposta> resultat = new ArrayList<>();
+
+        for (Hexagon hex : hexagons) {
+            boolean hiHaLladre = (hexLladre != null && hexLladre.getId() == hex.getId());
+
+            List<ConstruccioAdjacenciaResposta> construccions = new ArrayList<>();
+            List<HexagonVertex> hexVertexList = new ArrayList<>(hex.getVertexs());
+            hexVertexList.sort(Comparator.comparingInt(HexagonVertex::getPosicio));
+
+            for (HexagonVertex hv : hexVertexList) {
+                int posicio = hv.getPosicio();
+                int vertexCodi = hv.getVertex().getCodi();
+                int vertexId = hv.getVertex().getId();
+
+                Optional<Assentament> assentamentOpt = assentamentRepository.findByVertexId(vertexId);
+
+                if (assentamentOpt.isPresent()) {
+                    Assentament assentament = assentamentOpt.get();
+                    construccions.add(new ConstruccioAdjacenciaResposta(
+                            posicio,
+                            vertexId,
+                            vertexCodi,
+                            assentament.getClass().getSimpleName(),
+                            assentament.getPropietari().getNom()));
+                }
+            }
+
+            resultat.add(new TaulerHexagonResposta(
+                    hex.getId(),
+                    hex.getCodi(),
+                    hex.getTipusTerreny(),
+                    hex.getNumero(),
+                    hiHaLladre,
+                    construccions));
+        }
+
+        return ResponseEntity.ok(resultat);
     }
 
     private void crearPilaCartes(Partida partida) {

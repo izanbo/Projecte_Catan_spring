@@ -1,12 +1,40 @@
 package catan.catanSpring.services;
 
-import catan.catanSpring.entities.*;
-import catan.catanSpring.repositories.*;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import catan.catanSpring.dto.JugadorRecursosResposta;
+import catan.catanSpring.entities.Aresta;
+import catan.catanSpring.entities.Carretera;
+import catan.catanSpring.entities.Ciutat;
+import catan.catanSpring.entities.EstatPartida;
+import catan.catanSpring.entities.Hexagon;
+import catan.catanSpring.entities.HexagonVertex;
+import catan.catanSpring.entities.Jugador;
+import catan.catanSpring.entities.Partida;
+import catan.catanSpring.entities.Poblat;
+import catan.catanSpring.entities.RecursJugador;
+import catan.catanSpring.entities.TipusCarta;
+import catan.catanSpring.entities.TipusRecurs;
+import catan.catanSpring.entities.TipusTerreny;
+import catan.catanSpring.entities.Vertex;
+import catan.catanSpring.repositories.ArestaRepository;
+import catan.catanSpring.repositories.AssentamentRepository;
+import catan.catanSpring.repositories.CarreteraRepository;
+import catan.catanSpring.repositories.CartaDesenvolupamentRepository;
+import catan.catanSpring.repositories.CiutatRepository;
+import catan.catanSpring.repositories.HexagonVertexRepository;
+import catan.catanSpring.repositories.JugadorRepository;
+import catan.catanSpring.repositories.PartidaRepository;
+import catan.catanSpring.repositories.PoblatRepository;
+import catan.catanSpring.repositories.RecursJugadorRepository;
+import catan.catanSpring.repositories.VertexRepository;
 
 @Service
 @Transactional
@@ -426,5 +454,19 @@ public class JugadorService {
 
     public void PassarTorn(int idJugador) {
         passarTorn(idJugador);
+    }
+
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> obtenirRecursos(int idJugador) {
+        Optional<Jugador> jugadorOpt = jugadorRepository.findById(idJugador);
+        if (jugadorOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No s'ha trobat cap jugador amb ID: " + idJugador);
+        }
+
+        Jugador jugador = jugadorOpt.get();
+        List<RecursJugador> recursos = recursJugadorRepository.findByJugadorId(idJugador);
+
+        return ResponseEntity.ok(JugadorRecursosResposta.de(jugador, recursos));
     }
 }
