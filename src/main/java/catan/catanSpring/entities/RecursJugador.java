@@ -1,0 +1,109 @@
+package catan.catanSpring.entities;
+
+import org.hibernate.annotations.Check;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedQueries;
+import jakarta.persistence.NamedQuery;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
+@Entity
+@Check(constraints = "quantitat >= 0")
+@Table(name = "recurs_jugador", uniqueConstraints = @UniqueConstraint(name = "uk_recurs_jugador_tipus", columnNames = { "jugador_id", "tipus_recurs" }))
+@NamedQueries({
+    @NamedQuery(
+        name = "RecursJugador.findByJugador",
+        query = "SELECT r FROM RecursJugador r WHERE r.jugador.id = :idJugador"
+    ),
+    @NamedQuery(
+        name = "RecursJugador.findByJugadorAndTipus",
+        query = "SELECT r FROM RecursJugador r WHERE r.jugador.id = :idJugador AND r.tipusRecurs = :tipus"
+    )
+})
+public class RecursJugador {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "jugador_id", nullable = false)
+    private Jugador jugador;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipus_recurs", nullable = false)
+    private TipusRecurs tipusRecurs;
+
+    @Column(nullable = false)
+    private int quantitat;
+
+    public RecursJugador(int id, Jugador jugador, TipusRecurs tipusRecurs, int quantitat) {
+        this.id = id;
+        this.jugador = jugador;
+        this.tipusRecurs = tipusRecurs;
+        this.quantitat = quantitat;
+    }
+
+    public RecursJugador() {
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public Jugador getJugador() {
+        return jugador;
+    }
+
+    public void setJugador(Jugador jugador) {
+        this.jugador = jugador;
+    }
+
+    public TipusRecurs getTipusRecurs() {
+        return tipusRecurs;
+    }
+
+    public void setTipusRecurs(TipusRecurs tipusRecurs) {
+        this.tipusRecurs = tipusRecurs;
+    }
+
+    public int getQuantitat() {
+        return quantitat;
+    }
+
+    public void setQuantitat(int quantitat) {
+        this.quantitat = quantitat;
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) return true;
+        if (!(object instanceof RecursJugador altre)) return false;
+        return getId() != 0 && getId() == altre.getId();
+    }
+
+    @Override
+    public int hashCode() {
+        return RecursJugador.class.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "RecursJugador{id=" + id + ", tipusRecurs=" + tipusRecurs + ", quantitat=" + quantitat + "}";
+    }
+
+}

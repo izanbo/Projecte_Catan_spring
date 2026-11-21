@@ -1,0 +1,16 @@
+package catan.catanSpring.entities;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "ciutat")
+public class Ciutat extends Assentament {
+
+    public Ciutat() {
+    }
+
+    public Ciutat(Jugador propietari, Vertex vertex) {
+        super(propietari, vertex);
+    }
+}
