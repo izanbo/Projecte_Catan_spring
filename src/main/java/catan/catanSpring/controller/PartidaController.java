@@ -29,5 +29,9 @@ public class PartidaController {
     public ResponseEntity<?> obtenirTauler(@PathVariable int idPartida) {
         return partidaService.obtenirTauler(idPartida);
     }
+    @PostMapping("/{idPartida}/daus")
+    public ResponseEntity<?> tirarDaus(@PathVariable int idPartida) {
+        return ResponseEntity.ok(partidaService.tirarDaus(idPartida));
+    }
 }
 

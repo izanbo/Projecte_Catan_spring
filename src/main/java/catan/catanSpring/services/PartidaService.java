@@ -18,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import catan.catanSpring.dto.ConstruccioAdjacenciaResposta;
 import catan.catanSpring.dto.NovaPartidaPeticio;
 import catan.catanSpring.dto.PartidaResposta;
+import catan.catanSpring.dto.ProduccioJugadorResposta;
+import catan.catanSpring.dto.RecursResposta;
 import catan.catanSpring.dto.TaulerHexagonResposta;
+import catan.catanSpring.dto.TiradaDausResposta;
 import catan.catanSpring.entities.Assentament;
 import catan.catanSpring.entities.CartaDesenvolupament;
 import catan.catanSpring.entities.Ciutat;
@@ -273,7 +276,7 @@ public class PartidaService {
         }
     }
 
-    public void tirarDaus(int idPartida) {
+    public TiradaDausResposta tirarDaus(int idPartida) {
         Partida partida = partidaRepository.findById(idPartida)
                 .orElseThrow(() -> new IllegalStateException("La partida no existeix."));
 
@@ -286,82 +289,104 @@ public class PartidaService {
 
         int dau1 = (int) (Math.random() * 6) + 1;
         int dau2 = (int) (Math.random() * 6) + 1;
+
         int tirada = dau1 + dau2;
+
         partida.setUltimaTirada(tirada);
         partida.setDausTirats(true);
 
-        System.out.println("Tirada de daus: " + dau1 + " + " + dau2 + " = " + tirada);
+        Map<Integer, Map<TipusRecurs, Integer>> resumRecursos = new HashMap<>();
+
+        for (Jugador jugador : partida.getJugadors()) {
+            resumRecursos.put(jugador.getId(), new HashMap<>());
+        }
 
         if (tirada == 7) {
             partida.setLladrePendent(true);
-            System.out.println("Ha sortit un 7! No hi ha producció. El lladre queda pendent.");
-
             for (Jugador jugador : partida.getJugadors()) {
                 List<RecursJugador> recursos = recursJugadorRepository.findByJugadorId(jugador.getId());
-                int total = recursos.stream().mapToInt(RecursJugador::getQuantitat).sum();
-
+                int total = recursos.stream()
+                        .mapToInt(RecursJugador::getQuantitat)
+                        .sum();
                 if (total > 7) {
                     int aDescartar = total / 2;
                     List<TipusRecurs> bossa = new ArrayList<>();
-                    for (RecursJugador r : recursos) {
-                        for (int i = 0; i < r.getQuantitat(); i++) bossa.add(r.getTipusRecurs());
+                    for (RecursJugador recurs : recursos) {
+                        for (int i = 0; i < recurs.getQuantitat(); i++) {
+                            bossa.add(recurs.getTipusRecurs());
+                        }
                     }
                     Collections.shuffle(bossa);
-
                     Map<TipusRecurs, Integer> descartats = new HashMap<>();
                     for (int i = 0; i < aDescartar; i++) {
-                        TipusRecurs t = bossa.get(i);
-                        descartats.put(t, descartats.getOrDefault(t, 0) + 1);
+                        TipusRecurs tipus = bossa.get(i);
+                        descartats.put(
+                                tipus,
+                                descartats.getOrDefault(tipus, 0) + 1
+                        );
                     }
 
-                    for (RecursJugador r : recursos) {
-                        int desc = descartats.getOrDefault(r.getTipusRecurs(), 0);
-                        if (desc > 0) r.setQuantitat(r.getQuantitat() - desc);
+                    for (RecursJugador recurs : recursos) {
+                        int quantitatDescartada = descartats.getOrDefault(recurs.getTipusRecurs(), 0);
+                        if (quantitatDescartada > 0) {
+                            recurs.setQuantitat(
+                                    recurs.getQuantitat() - quantitatDescartada
+                            );
+                        }
                     }
-                    System.out.println(jugador.getNom() + " tenia " + total + " recursos i n'ha descartat " + aDescartar + ": " + descartats);
                 }
             }
-            partidaRepository.save(partida);
-            return;
-        }
 
-        // Tirada diferent de 7
-        int idLladre = (partida.getHexagonLladre() != null) ? partida.getHexagonLladre().getId() : -1;
-        List<Hexagon> hexagons = hexagonRepository.findByPartidaAndNumeroSenseLladre(idPartida, tirada, idLladre);
+        } else {
+            int idLladre = partida.getHexagonLladre() != null
+                    ? partida.getHexagonLladre().getId()
+                    : -1;
 
-        Map<String, Map<TipusRecurs, Integer>> resumRecursos = new HashMap<>();
-
-        for (Hexagon hexagon : hexagons) {
-            TipusTerreny terreny = hexagon.getTipusTerreny();
-            TipusRecurs tipus = obtenirRecurs(terreny);
-            if (tipus == null) continue;
-
-            for (HexagonVertex hv : hexagon.getVertexs()) {
-                Vertex vertex = hv.getVertex();
-                Optional<Assentament> assentamentOpt = assentamentRepository.findByVertexId(vertex.getId());
-                if (assentamentOpt.isEmpty()) continue;
-
-                Assentament assentament = assentamentOpt.get();
-                int quantitat = (assentament instanceof Ciutat) ? 2 : 1;
-                Jugador propietari = assentament.getPropietari();
-
-                Optional<RecursJugador> recursOpt = recursJugadorRepository.findByJugadorIdAndTipusRecurs(propietari.getId(), tipus);
-                recursOpt.ifPresent(r -> {
-                    r.setQuantitat(r.getQuantitat() + quantitat);
-                    resumRecursos.putIfAbsent(propietari.getNom(), new HashMap<>());
-                    resumRecursos.get(propietari.getNom()).merge(tipus, quantitat, Integer::sum);
-                });
+            List<Hexagon> hexagons = hexagonRepository.findByPartidaAndNumeroSenseLladre(
+                            idPartida, tirada, idLladre
+                    );
+            for (Hexagon hexagon : hexagons) {
+                TipusRecurs tipus = obtenirRecurs(hexagon.getTipusTerreny());
+                if (tipus == null) continue;
+                for (HexagonVertex hv : hexagon.getVertexs()) {
+                    Vertex vertex = hv.getVertex();
+                    Optional<Assentament> assentamentOpt = assentamentRepository.findByVertexId(vertex.getId());
+                    if (assentamentOpt.isEmpty()) continue;
+                    Assentament assentament = assentamentOpt.get();
+                    int quantitat = (assentament instanceof Ciutat) ? 2 : 1;
+                    Jugador propietari = assentament.getPropietari();
+                    Optional<RecursJugador> recursOpt = recursJugadorRepository.findByJugadorIdAndTipusRecurs(propietari.getId(), tipus);
+                    if (recursOpt.isPresent()) {
+                        RecursJugador recurs = recursOpt.get();
+                        recurs.setQuantitat(recurs.getQuantitat() + quantitat);
+                        resumRecursos.get(propietari.getId()).merge(tipus, quantitat, Integer::sum);
+                    }
+                }
             }
         }
-
-        System.out.println("Resum de producció per la tirada " + tirada + ":");
-        if (resumRecursos.isEmpty()) {
-            System.out.println("  Cap jugador ha rebut recursos.");
-        } else {
-            resumRecursos.forEach((nom, mapa) -> System.out.println("  " + nom + " ha rebut: " + mapa));
-        }
-
         partidaRepository.save(partida);
+
+        List<ProduccioJugadorResposta> jugadorsResposta = new ArrayList<>();
+
+        for (Jugador jugador : partida.getJugadors()) {
+            List<RecursResposta> recursosResposta = new ArrayList<>();
+            resumRecursos.get(jugador.getId()).forEach((tipus, quantitat) ->
+                    recursosResposta.add(new RecursResposta(tipus, quantitat))
+            );
+            jugadorsResposta.add(
+                    new ProduccioJugadorResposta(
+                            jugador.getId(),
+                            jugador.getNom(),
+                            recursosResposta
+                    )
+            );
+        }
+        return new TiradaDausResposta(
+                dau1,
+                dau2,
+                tirada,
+                jugadorsResposta
+        );
     }
 
     public void comprovarVictoria(int idPartida) {
